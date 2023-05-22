@@ -1,16 +1,21 @@
 # V 0.14
 
+import os
 import time
 import numpy as np
+import scipy as sp
 import tensorflow as tf
 from keras import layers
 from matplotlib import pyplot as plt
+from PIL import Image
+from typing import Any
+from typing import Generator
 
 
 tf.random.set_seed(113)  # For reproducibility
 
 PATH_ROOT = "training_files/"  # Root for all folders
-DATASET_MEMMAP_PATH = "dataset_memmap/data.dat"
+DATASET_MEMMAP_PATH = "dataset_memmap/data.dat"  # Root for preprocessed dataset
 
 LATENT_DIM = 128
 LEARNING_RATE = 1e-4
@@ -21,10 +26,13 @@ BATCH_SIZE = 64
 BETA_1 = 0.0
 BETA_2 = 0.9
 
+PENALTY_RATE = 10.0
+CRITIC_ITER = 5
+
 
 def load_data(path: str, shape: tuple = (60_000, 64, 64, 3)) -> np.ndarray:
     params = {
-        "filename": path,
+        "filename": os.path.join(PATH_ROOT, path),
         "dtype": "uint8",
         "mode": "r",
         "shape": shape
@@ -121,6 +129,9 @@ class ProgressLogger:
     NUM_EXAMPLES_TO_GENERATE = 25
     SEED = tf.random.normal([NUM_EXAMPLES_TO_GENERATE, 1, 1, LATENT_DIM])
 
+    LOG_FILENAME = "temp.txt"
+    FID_FILENAME = "FID.txt"
+
     @classmethod
     def generate_and_save_images(cls, generator: tf.keras.Sequential, epoch: int):
         gen_images = generator(cls.SEED, training=False).numpy()
@@ -133,31 +144,42 @@ class ProgressLogger:
             ax[i // size, i % size].imshow(gen_images[i])
 
         plt.subplots_adjust(top=1, bottom=0, right=1, left=0, hspace=0.05, wspace=0.05)
-        plt.savefig(PATH_ROOT + 'image_at_epoch_{:04d}.png'.format(epoch))
+        plt.savefig(os.path.join(PATH_ROOT, "image_at_epoch_{:04d}.png").format(epoch))
         plt.close()
 
     @classmethod
-    def save_and_print_log(cls, str_line: str, log_filename: str = 'temp.txt'):
+    def save_and_print_log(cls, str_line: str):
         print(str_line)
-        with open(PATH_ROOT + log_filename, "a+") as file:
+        with open(os.path.join(PATH_ROOT, cls.LOG_FILENAME), "a+") as file:
+            file.write(str_line + "\n")
+
+    @classmethod
+    def save_fid_log(cls, str_line: str):
+        with open(os.path.join(PATH_ROOT, cls.FID_FILENAME), "a+") as file:
             file.write(str_line + "\n")
 
 
 class Model:
     FREQ_SAVE = 2
-    CHECKPOINT_DIR = PATH_ROOT + "training_checkpoints"
-    CHECKPOINT_PREFIX = f"{CHECKPOINT_DIR}/ckpt"
+    CHECKPOINT_DIR = os.path.join(PATH_ROOT, "training_checkpoints")
+    CHECKPOINT_PREFIX = f"ckpt"
+
+    INCEPTION_SIZE = (299, 299, 3)
+    INCEPTION_BATCH = 3_000
 
     def __init__(self, learning_rate: float = 0.0001, beta_1: float = 0.0, beta_2: float = 0.9,
                  penalty_rate: float = 10.0, critic_iter: int = 5):
+        self.inception_model = tf.keras.applications.InceptionV3(
+            include_top=False, pooling='avg', input_shape=self.INCEPTION_SIZE)
+
         self.generator = ModelStructure.create_generator_model()
         self.discriminator = ModelStructure.create_discriminator_model()
 
         self.penalty_rate = penalty_rate
         self.critic_iter = critic_iter
 
-        self.gen_optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate, beta_1=beta_1, beta_2=beta_2)
-        self.dis_optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate, beta_1=beta_1, beta_2=beta_2)
+        self.gen_optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=learning_rate, beta_1=beta_1, beta_2=beta_2)
+        self.dis_optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=learning_rate, beta_1=beta_1, beta_2=beta_2)
 
         self.checkpoint = tf.train.Checkpoint(
             gen_optimizer=self.gen_optimizer,
@@ -166,27 +188,74 @@ class Model:
             discriminator=self.discriminator
         )
 
-    def get_last_saved_epoch(self) -> int:
+    @staticmethod
+    def scale_images(image_array: np.ndarray, new_shape: tuple[int, int, int]) -> np.ndarray:
+        image_num = image_array.shape[0]
+        image_array_int = (255 * (image_array + 1) / 2).astype('uint8')
+        result = np.zeros((image_num, *new_shape))
+        for i in range(image_num):
+            image = Image.fromarray(image_array_int[i])
+            new_image = image.resize(size=new_shape[:2], resample=Image.BICUBIC)
+            # noinspection PyTypeChecker
+            result[i] = (2 * np.asarray(new_image, dtype='float32') / 255) - 1
+        return result
+
+    def calculate_fid(self, image_array_1: np.ndarray, image_array_2: np.ndarray) -> float:
+        activation_1 = self.inception_model.predict(image_array_1, verbose=0)
+        activation_2 = self.inception_model.predict(image_array_2, verbose=0)
+
+        # Calculate mean and covariance statistics
+        mu_1, sigma_1 = activation_1.mean(axis=0), np.cov(activation_1, rowvar=False)
+        mu_2, sigma_2 = activation_2.mean(axis=0), np.cov(activation_2, rowvar=False)
+
+        # Calculate sum squared difference between means
+        s_diff = np.sum((mu_1 - mu_2) ** 2.0)
+
+        # Calculate sqrt of product between cov
+        cov_mean = sp.linalg.sqrtm(sigma_1.dot(sigma_2))
+
+        # Check and correct imaginary numbers from sqrt
+        if np.iscomplexobj(cov_mean):
+            # noinspection PyUnresolvedReferences
+            cov_mean = cov_mean.real
+
+        # calculate score
+        return s_diff + np.trace(sigma_1 + sigma_2 - 2.0 * cov_mean)
+
+    def get_fid_score(self, dataset: np.ndarray) -> float:
+        real_idx = np.random.randint(low=0, high=dataset.shape[0], size=self.INCEPTION_BATCH)
+        real_img = dataset[real_idx]
+
+        fake_seed = tf.random.normal([self.INCEPTION_BATCH, 1, 1, LATENT_DIM])
+        fake_img = self.generator.predict(fake_seed, verbose=0)
+
+        real_img_scale = self.scale_images(image_array=real_img, new_shape=self.INCEPTION_SIZE)
+        fake_img_scale = self.scale_images(image_array=fake_img, new_shape=self.INCEPTION_SIZE)
+
+        return self.calculate_fid(real_img_scale, fake_img_scale)
+
+    def get_last_saved_epoch(self, verbose_flag: bool = True) -> int:
         epochs_offset = 0
         ckpt_path = tf.train.latest_checkpoint(self.CHECKPOINT_DIR)
         if ckpt_path:
             self.checkpoint.restore(ckpt_path)
-            with open(f"{self.CHECKPOINT_DIR}/checkpoint", "r") as f:
+            with open(os.path.join(self.CHECKPOINT_DIR, "checkpoint"), mode="r") as f:
                 last_checkpoint_num = int(f.readline().split(":")[-1].strip()[1:-1].split("-")[-1])
             epochs_offset = self.FREQ_SAVE * last_checkpoint_num
-            print(f"\nStart from {epochs_offset} epoch\n")
+            if verbose_flag:
+                print(f"\nStart from {epochs_offset} epoch\n")
         return epochs_offset
 
     @staticmethod
-    def _get_random_idx_batch(low: int, high: int, size: int):
+    def _get_random_idx_batch(low: int, high: int, size: int) -> np.ndarray:
         return np.random.randint(low=low, high=high, size=size)
 
-    def random_indexes_generator(self, dataset_size: int, batch_size: int):
+    def random_indexes_generator(self, dataset_size: int, batch_size: int) -> Generator[np.ndarray, Any, None]:
         for _ in range(dataset_size // batch_size):
             yield self._get_random_idx_batch(0, dataset_size, batch_size)
 
     @tf.function
-    def train_step(self, real_image_batch: tf.Tensor, batch_size: int):
+    def train_step(self, real_image_batch: tf.Tensor, batch_size: int) -> tuple[np.ndarray, np.ndarray, float, float]:
         noise_shape = (batch_size, 1, 1, LATENT_DIM)
 
         # Generator training
@@ -248,9 +317,11 @@ class Model:
             gen_loss, dis_loss, real_score, fake_score = \
                 self.train_step(real_image_batch=dataset[last_idx], batch_size=batch_size)
 
-            # Save the model every FREQ_SAVE epochs
+            # Save the model and calculate FID every FREQ_SAVE epochs
             if (epoch + 1) % self.FREQ_SAVE == 0:
-                self.checkpoint.save(file_prefix=self.CHECKPOINT_PREFIX)
+                self.checkpoint.save(file_prefix=os.path.join(PATH_ROOT, self.CHECKPOINT_PREFIX))
+                fid_score = self.get_fid_score(dataset=dataset)
+                ProgressLogger.save_fid_log(str_line=f"{epoch + 1}: {fid_score}")
 
             ProgressLogger.save_and_print_log(
                 str_line=f"Epoch: {epoch + 1} | Time: {round(time.time() - start, 3)} s | "
@@ -264,7 +335,7 @@ def main():
     print("\nDataset Loaded!\n")
 
     model = Model(learning_rate=LEARNING_RATE, beta_1=BETA_1, beta_2=BETA_2,
-                  penalty_rate=10.0, critic_iter=5)
+                  penalty_rate=PENALTY_RATE, critic_iter=CRITIC_ITER)
     model.train(dataset=dataset, epochs=EPOCHS, batch_size=BATCH_SIZE)
 
 

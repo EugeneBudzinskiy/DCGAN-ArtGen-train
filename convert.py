@@ -46,8 +46,8 @@ def unpack_lsun(suffix: str = "unpacked"):
             dst_path = f"{DATASET_LSUN_UNPACKED_PATH}/{folder}_{suffix}"
 
             if check_if_folder_exist_and_try_create(path=dst_path):
-                print(f"[Info]: Folder `{dst_path}` already exist\n"
-                      f"[Info]: Skipping unpacking..")
+                print(f"[INFO]: Folder `{dst_path}` already exist\n"
+                      f"[INFO]: Skipping unpacking..")
                 continue
 
             export_images(db_path=src_path, out_dir=dst_path, flat=True)
@@ -57,8 +57,8 @@ def create_memmap(dtype: str = 'uint8'):
     dst_path = f"{DATASET_MEMMAP_PATH}/{DATASET_MEMMAP_NAME}"
 
     if check_if_file_exist_and_try_create(path=dst_path):
-        print(f"[Info]: File `{dst_path}` already exist\n"
-              f"[Info]: Skipping memmap creation..")
+        print(f"[INFO]: File `{dst_path}` already exist\n"
+              f"[INFO]: Skipping memmap creation..")
         return
 
     run_idx = 0
@@ -77,7 +77,7 @@ def create_memmap(dtype: str = 'uint8'):
                         ms = min(width, height)
                         x_off, y_off = (width - ms) // 2, (height - ms) // 2
                         image = image.crop(box=(x_off, y_off, x_off + ms, y_off + ms))
-                        image = image.resize(size=image_dim[:2], resample=3)
+                        image = image.resize(size=image_dim[:2], resample=Image.BICUBIC)
 
                         # noinspection PyTypeChecker
                         memmap_array[run_idx] = np.asarray(image)
@@ -88,31 +88,31 @@ def create_memmap(dtype: str = 'uint8'):
 
 
 def main():
-    print(f"[Info]: Checking `{DATASET_LSUN_UNPACKED_PATH}` for any folders..")
+    print(f"[INFO]: Checking `{DATASET_LSUN_UNPACKED_PATH}` for any folders..")
     if check_if_have_any_folders(path=DATASET_LSUN_UNPACKED_PATH):
-        print(f"[Info]: Creating memory map from `{DATASET_LSUN_UNPACKED_PATH}`")
+        print(f"[INFO]: Creating memory map from `{DATASET_LSUN_UNPACKED_PATH}`")
         create_memmap()
     else:
-        print(f"[Info]: Checking `{DATASET_LSUN_PATH}` for any folders..")
+        print(f"[INFO]: Checking `{DATASET_LSUN_PATH}` for any folders..")
         if check_if_have_any_folders(path=DATASET_LSUN_PATH):
-            print(f"[Info]: Unpacking `{DATASET_LSUN_PATH}` to `{DATASET_LSUN_UNPACKED_PATH}`..")
+            print(f"[INFO]: Unpacking `{DATASET_LSUN_PATH}` to `{DATASET_LSUN_UNPACKED_PATH}`..")
             unpack_lsun()
 
-            print(f"[Info]: Creating memory map from `{DATASET_LSUN_UNPACKED_PATH}`..")
+            print(f"[INFO]: Creating memory map from `{DATASET_LSUN_UNPACKED_PATH}`..")
             create_memmap()
         else:
-            print(f"[Info]: Checking `{DATASET_MEMMAP_PATH}` for `{DATASET_MEMMAP_NAME}` file..")
+            print(f"[INFO]: Checking `{DATASET_MEMMAP_PATH}` for `{DATASET_MEMMAP_NAME}` file..")
             file_path = f"{DATASET_MEMMAP_PATH}/{DATASET_MEMMAP_NAME}"
             if check_if_file_exist_and_try_create(path=file_path):
-                print(f"[Info]: File with memory map exist. Path: `{file_path}`")
+                print(f"[INFO]: File with memory map exist. Path: `{file_path}`")
             else:
                 os.remove(file_path)  # Remove created file in result of checking
-                print(f"[Info]: Nothing was found!\n"
-                      f"[Info]: Download ArtBench-10 dataset (original size LSUN, per-style)\n"
-                      f"[Info]: Dataset link: `https://github.com/liaopeiyuan/artbench`\n"
-                      f"[Info]: And put downloaded folders (per-style) in `{DATASET_LSUN_PATH}`")
+                print(f"[INFO]: Nothing was found!\n"
+                      f"[INFO]: Download ArtBench-10 dataset (original size LSUN, per-style)\n"
+                      f"[INFO]: Dataset link: `https://github.com/liaopeiyuan/artbench`\n"
+                      f"[INFO]: And put downloaded folders (per-style) in `{DATASET_LSUN_PATH}`")
 
-    print("[Info]: Finishing..")
+    print("[INFO]: Finished")
 
 
 if __name__ == '__main__':
