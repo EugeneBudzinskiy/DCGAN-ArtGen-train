@@ -34,7 +34,7 @@ def collect_log_data(path: str, cell_separator: str, name_value_separator: str) 
         Example:
             >>> collect_log_data('log.txt', ',', ':')
             {'name1': [value1, value2, ...], 'name2': [value1, value2, ...], ...}
-        """
+    """
     with open(path, 'r') as f:
         log_list = f.readlines()
 
@@ -75,7 +75,7 @@ def save_log_plots(data: dict, output_path: str):
             ...     "Fake score": ["value1", "value2", ...]
             ... }
             >>> save_log_plots(data_dict, "output/plots/")
-        """
+    """
     mul_x = 2
     mul_y = 1
     k = 4
@@ -115,7 +115,7 @@ def collect_fid_data(path: str, name_value_separator: str):
         Example:
             >>> collect_fid_data('fid_data.txt', ':')
             {'epoch': [epoch1, epoch2, ...], 'value': [value1, value2, ...]}
-        """
+    """
     with open(path, 'r') as f:
         fid_list = f.readlines()
 
@@ -143,7 +143,7 @@ def save_fid_plots(data: dict, output_path: str):
         Example:
             >>> data_dict = {'epoch': ["epoch1", "epoch2", ...], 'value': ["value1", "value2", ...]}
             >>> save_fid_plots(data_dict, "output/plots/")
-        """
+    """
     mul_x = 2
     mul_y = 1
     k = 4
