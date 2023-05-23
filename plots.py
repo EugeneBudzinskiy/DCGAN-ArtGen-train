@@ -2,20 +2,39 @@ import os
 import config
 from matplotlib import pyplot as plt
 
-MODEL = config.MODELS[config.MODEL_NAME]
-MODEL_FREQ_SAVE = MODEL.Model.FREQ_SAVE
 
+MODEL = config.MODELS[config.MODEL_NAME]  # Get corresponding model file
+MODEL_FREQ_SAVE = MODEL.Model.FREQ_SAVE  # Gen `FREQ_SAVE` from corresponding model
+
+# Log file parameters
 LOG_PATH = os.path.join(MODEL.PATH_ROOT, MODEL.ProgressLogger.LOG_FILENAME)
 LOG_CELL_SEPARATOR = "|"
 LOG_NAME_VALUE_SEPARATOR = ":"
 
+# FID file parameters
 FID_PATH = os.path.join(MODEL.PATH_ROOT, MODEL.ProgressLogger.FID_FILENAME)
 FID_NAME_VALUE_SEPARATOR = ":"
 
-OUTPUT_PATH = MODEL.PATH_ROOT
+OUTPUT_PATH = MODEL.PATH_ROOT  # Output path to save plots
 
 
 def collect_log_data(path: str, cell_separator: str, name_value_separator: str) -> dict:
+    """
+        Collects log data from a file and organizes it into a dictionary.
+
+        Args:
+            path (str): The path to the log file.
+            cell_separator (str): The separator used to split cells within each line.
+            name_value_separator (str): The separator used to split name-value pairs within each cell.
+
+        Returns:
+            dict: A dictionary containing the collected log data, where the keys represent the names and the values
+                  are lists of corresponding values extracted from the log file.
+
+        Example:
+            >>> collect_log_data('log.txt', ',', ':')
+            {'name1': [value1, value2, ...], 'name2': [value1, value2, ...], ...}
+        """
     with open(path, 'r') as f:
         log_list = f.readlines()
 
@@ -37,6 +56,26 @@ def collect_log_data(path: str, cell_separator: str, name_value_separator: str) 
 
 
 def save_log_plots(data: dict, output_path: str):
+    """
+        Saves plots based on the given data dictionary.
+
+        Args:
+            data (dict): A dictionary containing the data for plotting. The keys represent different categories of data.
+                         The expected keys are "D. loss", "G. loss", "Real score", and "Fake score".
+            output_path (str): The output path where the plots will be saved.
+
+        Returns:
+            None
+
+        Example:
+            >>> data_dict = {
+            ...     "D. loss": ["value1", "value2", ...],
+            ...     "G. loss": ["value1", "value2", ...],
+            ...     "Real score": ["value1", "value2", ...],
+            ...     "Fake score": ["value1", "value2", ...]
+            ... }
+            >>> save_log_plots(data_dict, "output/plots/")
+        """
     mul_x = 2
     mul_y = 1
     k = 4
@@ -61,6 +100,22 @@ def save_log_plots(data: dict, output_path: str):
 
 
 def collect_fid_data(path: str, name_value_separator: str):
+    """
+        Collects FID (Fréchet Inception Distance) data from a file and organizes it into a dictionary.
+
+        Args:
+            path (str): The path to the file containing FID data.
+            name_value_separator (str): The separator used to split the epoch-value pairs.
+
+        Returns:
+            dict: A dictionary containing the collected FID data, where the keys are "epoch" and "value". The "epoch" key
+                  corresponds to a list of epoch values, and the "value" key corresponds to a list of FID values. If a value
+                  is missing or empty, it is represented as None in the list.
+
+        Example:
+            >>> collect_fid_data('fid_data.txt', ':')
+            {'epoch': [epoch1, epoch2, ...], 'value': [value1, value2, ...]}
+        """
     with open(path, 'r') as f:
         fid_list = f.readlines()
 
@@ -74,6 +129,21 @@ def collect_fid_data(path: str, name_value_separator: str):
 
 
 def save_fid_plots(data: dict, output_path: str):
+    """
+        Saves a plot based on the given FID data dictionary.
+
+        Args:
+            data (dict): A dictionary containing the FID data. It should have two keys: "epoch" and "value". The "epoch" key
+                         corresponds to a list of epoch values, and the "value" key corresponds to a list of FID values.
+            output_path (str): The output path where the plot will be saved.
+
+        Returns:
+            None
+
+        Example:
+            >>> data_dict = {'epoch': ["epoch1", "epoch2", ...], 'value': ["value1", "value2", ...]}
+            >>> save_fid_plots(data_dict, "output/plots/")
+        """
     mul_x = 2
     mul_y = 1
     k = 4
