@@ -48,6 +48,7 @@ def load_data(path: str, shape: tuple = (60_000, 64, 64, 3)) -> np.ndarray:
         Example:
             >>> load_data('data.memmap', shape=(10000, 32, 32, 3))
     """
+
     params = {
         "filename": os.path.join(PATH_ROOT, path),
         "dtype": "uint8",
@@ -104,6 +105,7 @@ class ModelStructure:
             Returns:
                 tf.keras.Sequential: The discriminator model.
         """
+
         model = tf.keras.Sequential()
         in_s = (64, 64, 3)
 
@@ -144,6 +146,7 @@ class ModelStructure:
             Returns:
                 tf.keras.Sequential: The generator model.
         """
+
         model = tf.keras.Sequential()
         in_s = (1, 1, LATENT_DIM)
         # shape: N x 1 x 1 x LATENT_DIM
@@ -201,6 +204,7 @@ class ProgressLogger:
             save_fid_log(str_line):
                 Saves the FID score log with the given string.
     """
+
     PLOT_SIZE = (10, 10)
     NUM_EXAMPLES_TO_GENERATE = 25
     SEED = tf.random.normal([NUM_EXAMPLES_TO_GENERATE, 1, 1, LATENT_DIM])
@@ -217,6 +221,7 @@ class ProgressLogger:
                 generator (tf.keras.Sequential): The generator model.
                 epoch (int): The current epoch number.
         """
+
         gen_images = generator(cls.SEED, training=False).numpy()
         gen_images = (255 * (gen_images + 1) / 2).astype("uint8")
 
@@ -238,6 +243,7 @@ class ProgressLogger:
             Args:
                 str_line (str): The string to be saved and printed.
         """
+
         print(str_line)
         with open(os.path.join(PATH_ROOT, cls.LOG_FILENAME), "a+") as file:
             file.write(str_line + "\n")
@@ -250,6 +256,7 @@ class ProgressLogger:
             Args:
                 str_line (str): The string to be saved in the FID score log.
         """
+
         with open(os.path.join(PATH_ROOT, cls.FID_FILENAME), "a+") as file:
             file.write(str_line + "\n")
 
@@ -273,13 +280,16 @@ class Model:
                 Scales the given image array to the specified shape.
 
             calculate_fid(image_array_1, image_array_2) -> float:
-                Calculates the Fréchet Inception Distance (FID) score between two sets of images.
+                Calculates the Frechet Inception Distance (FID) score between two sets of images.
 
             get_fid_score(dataset) -> float:
                 Calculates the FID score between real and generated images from the given dataset.
 
             get_last_saved_epoch(verbose_flag=True) -> int:
                 Returns the epoch number of the last saved model checkpoint.
+
+            get_random_idx_batch(low: int, high: int, size: int) -> np.ndarray:
+                Generates a random batch of indexes within the specified range.
 
             random_indexes_generator(dataset_size, batch_size) -> Generator[np.ndarray, Any, None]:
                 Generates random indexes for creating mini-batches during training.
@@ -289,8 +299,8 @@ class Model:
 
             train(dataset, epochs=300, batch_size=64):
                 Trains the GAN model on the given dataset for the specified number of epochs.
-
     """
+
     FREQ_SAVE = 2
     CHECKPOINT_DIR = os.path.join(PATH_ROOT, "training_checkpoints")
     CHECKPOINT_PREFIX = f"ckpt"
@@ -342,6 +352,7 @@ class Model:
             Returns:
                 np.ndarray: The scaled image array.
         """
+
         image_num = image_array.shape[0]
         image_array_int = (255 * (image_array + 1) / 2).astype('uint8')
         result = np.zeros((image_num, *new_shape))
@@ -363,6 +374,7 @@ class Model:
             Returns:
                 float: The FID score.
         """
+
         activation_1 = self.inception_model.predict(image_array_1, verbose=0)
         activation_2 = self.inception_model.predict(image_array_2, verbose=0)
 
@@ -394,6 +406,7 @@ class Model:
             Returns:
                 float: The FID score.
         """
+
         real_idx = np.random.randint(low=0, high=dataset.shape[0], size=self.INCEPTION_BATCH)
         real_img = dataset[real_idx]
 
@@ -415,6 +428,7 @@ class Model:
             Returns:
                 int: The epoch number.
         """
+
         epochs_offset = 0
         ckpt_path = tf.train.latest_checkpoint(self.CHECKPOINT_DIR)
         if ckpt_path:
@@ -438,7 +452,7 @@ class Model:
 
             Returns:
                 np.ndarray: The batch of random indexes.
-            """
+        """
         return np.random.randint(low=low, high=high, size=size)
 
     def random_indexes_generator(self, dataset_size: int, batch_size: int) -> Generator[np.ndarray, Any, None]:
@@ -452,6 +466,7 @@ class Model:
             Yields:
                 np.ndarray: A batch of random indexes.
         """
+
         for _ in range(dataset_size // batch_size):
             yield self.get_random_idx_batch(0, dataset_size, batch_size)
 
@@ -467,6 +482,7 @@ class Model:
             Returns:
                 tuple: A tuple containing the generator loss, discriminator loss, real score, and fake score.
         """
+
         noise_shape = (batch_size, 1, 1, LATENT_DIM)
 
         # Generator training
@@ -526,6 +542,7 @@ class Model:
                 epochs (int): The number of epochs to train (default: 300).
                 batch_size (int): The batch size (default: 64).
         """
+
         epochs_offset = self.get_last_saved_epoch()
         for epoch in range(epochs_offset, epochs):
             start = time.time()

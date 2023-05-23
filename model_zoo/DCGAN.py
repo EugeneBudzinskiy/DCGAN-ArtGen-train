@@ -12,10 +12,14 @@ from typing import Any
 from typing import Generator
 
 
-tf.random.set_seed(113)  # For reproducibility
+tf.random.set_seed(113)  # Set seed value for reproducibility
 
 PATH_ROOT = "training_files/"  # Root for all folders
 DATASET_MEMMAP_PATH = "dataset_memmap/data.dat"  # Root for preprocessed dataset
+
+#
+# Hyperparameters for model
+#
 
 LATENT_DIM = 100
 LEARNING_RATE = 2e-4
@@ -28,6 +32,20 @@ BETA_2 = 0.999
 
 
 def load_data(path: str, shape: tuple = (60_000, 64, 64, 3)) -> np.ndarray:
+    """
+        Loads data from a memory-mapped file and returns it as a NumPy array.
+
+        Args:
+            path (str): The path to the memory-mapped file.
+            shape (tuple, optional): The desired shape of the loaded data. Defaults to (60000, 64, 64, 3).
+
+        Returns:
+            np.ndarray: The loaded data as a NumPy array, with values ranging from -1 to 1.
+
+        Example:
+            >>> load_data('data.memmap', shape=(10000, 32, 32, 3))
+    """
+
     params = {
         "filename": os.path.join(PATH_ROOT, path),
         "dtype": "uint8",
@@ -38,8 +56,26 @@ def load_data(path: str, shape: tuple = (60_000, 64, 64, 3)) -> np.ndarray:
 
 
 class ModelStructure:
+    """
+        A class that defines the structure of the discriminator and generator models for a GAN.
+
+        Methods:
+            create_discriminator_model() -> tf.keras.Sequential:
+                Creates the discriminator model.
+
+            create_generator_model() -> tf.keras.Sequential:
+                Creates the generator model.
+    """
+
     @classmethod
     def create_discriminator_model(cls) -> tf.keras.Sequential:
+        """
+            Creates the discriminator model.
+
+            Returns:
+                tf.keras.Sequential: The discriminator model.
+        """
+
         model = tf.keras.Sequential()
         in_s = [64, 64, 3]
         # in: 64 x 64 x 3
@@ -73,6 +109,13 @@ class ModelStructure:
 
     @classmethod
     def create_generator_model(cls) -> tf.keras.Sequential:
+        """
+            Creates the generator model.
+
+            Returns:
+                tf.keras.Sequential: The generator model.
+        """
+
         model = tf.keras.Sequential()
         in_s = (1, 1, LATENT_DIM)
         # in: 1 x 1 x latent_dim
@@ -98,13 +141,34 @@ class ModelStructure:
         model.add(layers.ReLU())
         # out: 32 x 32 x 64
 
-        model.add(
-            layers.Conv2DTranspose(3, kernel_size=4, strides=2, padding='same', use_bias=False, activation='tanh'))
+        model.add(layers.Conv2DTranspose(3, kernel_size=4, strides=2, padding='same',
+                                         use_bias=False, activation='tanh'))
         # out: 64 x 64 x 3
         return model
 
 
 class ProgressLogger:
+    """
+        A class that provides logging and saving functionalities for monitoring the progress of a GAN.
+
+        Attributes:
+            PLOT_SIZE (tuple): The size of the plot for generating and saving images.
+            NUM_EXAMPLES_TO_GENERATE (int): The number of examples to generate and save.
+            SEED (tf.Tensor): The seed for generating random images.
+            LOG_FILENAME (str): The filename for saving the log.
+            FID_FILENAME (str): The filename for saving the FID score log.
+
+        Methods:
+            generate_and_save_images(generator, epoch):
+                Generates and saves images using the given generator model.
+
+            save_and_print_log(str_line):
+                Saves the log and prints the given string.
+
+            save_fid_log(str_line):
+                Saves the FID score log with the given string.
+    """
+
     PLOT_SIZE = (10, 10)
     NUM_EXAMPLES_TO_GENERATE = 25
     SEED = tf.random.normal([NUM_EXAMPLES_TO_GENERATE, 1, 1, LATENT_DIM])
@@ -114,6 +178,14 @@ class ProgressLogger:
 
     @classmethod
     def generate_and_save_images(cls, generator: tf.keras.Sequential, epoch: int):
+        """
+            Generates and saves images using the given generator model.
+
+            Args:
+                generator (tf.keras.Sequential): The generator model.
+                epoch (int): The current epoch number.
+        """
+
         gen_images = generator(cls.SEED, training=False).numpy()
         gen_images = (255 * (gen_images + 1) / 2).astype("uint8")
 
@@ -128,18 +200,77 @@ class ProgressLogger:
         plt.close()
 
     @classmethod
-    def save_and_print_log(cls, str_line: str, log_filename: str = 'temp.txt'):
+    def save_and_print_log(cls, str_line: str):
+        """
+            Saves the log and prints the given string.
+
+            Args:
+                str_line (str): The string to be saved and printed.
+        """
+
         print(str_line)
-        with open(os.path.join(PATH_ROOT, log_filename), "a+") as file:
+        with open(os.path.join(PATH_ROOT, cls.LOG_FILENAME), "a+") as file:
             file.write(str_line + "\n")
 
     @classmethod
     def save_fid_log(cls, str_line: str):
+        """
+            Saves the FID score log with the given string.
+
+            Args:
+                str_line (str): The string to be saved in the FID score log.
+        """
+
         with open(os.path.join(PATH_ROOT, cls.FID_FILENAME), "a+") as file:
             file.write(str_line + "\n")
 
 
 class Model:
+    """
+        A class that represents a GAN model for training and evaluation.
+
+        Attributes:
+            FREQ_SAVE (int): The frequency at which to save the model and calculate FID score.
+            CHECKPOINT_DIR (str): The directory for saving checkpoints.
+            CHECKPOINT_PREFIX (str): The prefix for checkpoint filenames.
+            INCEPTION_SIZE (tuple): The size of the input images for InceptionV3.
+            INCEPTION_BATCH (int): The batch size for calculating FID score.
+
+        Methods:
+            __init__(learning_rate, beta_1, beta_2, penalty_rate, critic_iter):
+                Initializes the Model object with the specified hyperparameters.
+
+            scale_images(image_array, new_shape) -> np.ndarray:
+                Scales the given image array to the specified shape.
+
+            calculate_fid(image_array_1, image_array_2) -> float:
+                Calculates the Frechet Inception Distance (FID) score between two sets of images.
+
+            get_fid_score(dataset) -> float:
+                Calculates the FID score between real and generated images from the given dataset.
+
+            discriminator_loss(self, real_output: np.ndarray, fake_output: np.ndarray) -> np.ndarray:
+                Computes the total discriminator loss given the scores of real and fake outputs.
+
+            generator_loss(self, fake_output: np.ndarray) -> np.ndarray:
+                Computes the generator loss given the scores of the fake outputs.
+
+            get_last_saved_epoch(verbose_flag=True) -> int:
+                Returns the epoch number of the last saved model checkpoint.
+
+            get_random_idx_batch(low: int, high: int, size: int) -> np.ndarray:
+                Generates a random batch of indexes within the specified range.
+
+            random_indexes_generator(dataset_size, batch_size) -> Generator[np.ndarray, Any, None]:
+                Generates random indexes for creating mini-batches during training.
+
+            train_step(real_image_batch, batch_size) -> tuple[np.ndarray, np.ndarray, float, float]:
+                Performs a single training step on the GAN model.
+
+            train(dataset, epochs=300, batch_size=64):
+                Trains the GAN model on the given dataset for the specified number of epochs.
+    """
+
     FREQ_SAVE = 10
     CHECKPOINT_DIR = os.path.join(PATH_ROOT, "training_checkpoints")
     CHECKPOINT_PREFIX = f"ckpt"
@@ -148,6 +279,15 @@ class Model:
     INCEPTION_BATCH = 3_000
 
     def __init__(self, learning_rate: float = 0.0001, beta_1: float = 0.5, beta_2: float = 0.999):
+        """
+            Initializes the Model object with the specified hyperparameters.
+
+            Args:
+                learning_rate (float): The learning rate for the optimizer.
+                beta_1 (float): The beta_1 parameter for the optimizer.
+                beta_2 (float): The beta_2 parameter for the optimizer.
+        """
+
         self.inception_model = tf.keras.applications.InceptionV3(
             include_top=False, pooling='avg', input_shape=self.INCEPTION_SIZE)
 
@@ -168,6 +308,17 @@ class Model:
 
     @staticmethod
     def scale_images(image_array: np.ndarray, new_shape: tuple[int, int, int]) -> np.ndarray:
+        """
+            Scales the given image array to the specified shape.
+
+            Args:
+                image_array (np.ndarray): The array of images to scale.
+                new_shape (tuple): The new shape of the images.
+
+            Returns:
+                np.ndarray: The scaled image array.
+        """
+
         image_num = image_array.shape[0]
         image_array_int = (255 * (image_array + 1) / 2).astype('uint8')
         result = np.zeros((image_num, *new_shape))
@@ -179,6 +330,17 @@ class Model:
         return result
 
     def calculate_fid(self, image_array_1: np.ndarray, image_array_2: np.ndarray) -> float:
+        """
+            Calculates the Frechet Inception Distance (FID) score between two sets of images.
+
+            Args:
+                image_array_1 (np.ndarray): The first set of images.
+                image_array_2 (np.ndarray): The second set of images.
+
+            Returns:
+                float: The FID score.
+        """
+
         activation_1 = self.inception_model.predict(image_array_1, verbose=0)
         activation_2 = self.inception_model.predict(image_array_2, verbose=0)
 
@@ -201,6 +363,16 @@ class Model:
         return s_diff + np.trace(sigma_1 + sigma_2 - 2.0 * cov_mean)
 
     def get_fid_score(self, dataset: np.ndarray) -> float:
+        """
+            Calculates the FID score between real and generated images from the given dataset.
+
+            Args:
+                dataset (np.ndarray): The dataset containing real images.
+
+            Returns:
+                float: The FID score.
+        """
+
         real_idx = np.random.randint(low=0, high=dataset.shape[0], size=self.INCEPTION_BATCH)
         real_img = dataset[real_idx]
 
@@ -213,15 +385,45 @@ class Model:
         return self.calculate_fid(real_img_scale, fake_img_scale)
 
     def discriminator_loss(self, real_output: np.ndarray, fake_output: np.ndarray) -> np.ndarray:
+        """
+            Computes the total discriminator loss given the scores of real and fake outputs.
+
+            Args:
+                real_output (np.ndarray): The scores of the real outputs.
+                fake_output (np.ndarray): The scores of the fake outputs.
+
+            Returns:
+                np.ndarray: The total discriminator loss.
+        """
+
         real_loss = self.loss(tf.ones_like(real_output), real_output)
         fake_loss = self.loss(tf.zeros_like(fake_output), fake_output)
         total_loss = real_loss + fake_loss
         return total_loss
 
     def generator_loss(self, fake_output: np.ndarray) -> np.ndarray:
+        """
+            Computes the generator loss given the scores of the fake outputs.
+
+            Args:
+                fake_output (np.ndarray): The scores of the fake outputs.
+
+            Returns:
+                np.ndarray: The generator loss.
+        """
         return self.loss(tf.ones_like(fake_output), fake_output)
 
     def get_last_saved_epoch(self, verbose_flag: bool = True) -> int:
+        """
+            Returns the epoch number of the last saved model checkpoint.
+
+            Args:
+                verbose_flag (bool): Flag to print the starting epoch.
+
+            Returns:
+                int: The epoch number.
+        """
+
         epochs_offset = 0
         ckpt_path = tf.train.latest_checkpoint(self.CHECKPOINT_DIR)
         if ckpt_path:
@@ -234,15 +436,48 @@ class Model:
         return epochs_offset
 
     @staticmethod
-    def _get_random_idx_batch(low: int, high: int, size: int) -> np.ndarray:
+    def get_random_idx_batch(low: int, high: int, size: int) -> np.ndarray:
+        """
+            Generates a random batch of indexes within the specified range.
+
+            Args:
+                low (int): The lower bound of the range (inclusive).
+                high (int): The upper bound of the range (exclusive).
+                size (int): The size of the batch.
+
+            Returns:
+                np.ndarray: The batch of random indexes.
+        """
         return np.random.randint(low=low, high=high, size=size)
 
     def random_indexes_generator(self, dataset_size: int, batch_size: int) -> Generator[np.ndarray, Any, None]:
+        """
+            Generates random indexes for creating mini-batches during training.
+
+            Args:
+                dataset_size (int): The size of the dataset.
+                batch_size (int): The batch size.
+
+            Yields:
+                np.ndarray: A batch of random indexes.
+        """
+
         for _ in range(dataset_size // batch_size):
-            yield self._get_random_idx_batch(0, dataset_size, batch_size)
+            yield self.get_random_idx_batch(0, dataset_size, batch_size)
 
     @tf.function
-    def train_step(self, real_image_batch: tf.Tensor, batch_size: int):
+    def train_step(self, real_image_batch: tf.Tensor, batch_size: int) -> tuple[np.ndarray, np.ndarray, float, float]:
+        """
+            Performs a single training step on the GAN model.
+
+            Args:
+                real_image_batch (tf.Tensor): The batch of real images.
+                batch_size (int): The batch size.
+
+            Returns:
+                tuple: A tuple containing the generator loss, discriminator loss, real score, and fake score.
+        """
+
         noise_shape = (batch_size, 1, 1, LATENT_DIM)
 
         with tf.GradientTape() as gen_tape, tf.GradientTape() as dis_tape:
@@ -263,13 +498,22 @@ class Model:
         return gen_loss, dis_loss, tf.reduce_mean(real_output), tf.reduce_mean(fake_output)
 
     def train(self, dataset: np.ndarray, epochs: int = 300, batch_size: int = 64):
+        """
+            Trains the GAN model on the given dataset for the specified number of epochs.
+
+            Args:
+                dataset (np.ndarray): The training dataset.
+                epochs (int): The number of epochs to train (default: 300).
+                batch_size (int): The batch size (default: 64).
+        """
+
         epochs_offset = self.get_last_saved_epoch()
         for epoch in range(epochs_offset, epochs):
             start = time.time()
             for idx in self.random_indexes_generator(dataset.shape[0], batch_size=batch_size):
                 self.train_step(real_image_batch=dataset[idx], batch_size=batch_size)
 
-            last_idx = self._get_random_idx_batch(0, dataset.shape[0], batch_size)
+            last_idx = self.get_random_idx_batch(0, dataset.shape[0], batch_size)
             gen_loss, dis_loss, real_score, fake_score = \
                 self.train_step(real_image_batch=dataset[last_idx], batch_size=batch_size)
 
@@ -287,10 +531,14 @@ class Model:
 
 
 def main():
+    # Load preprocessed dataset in memmap format
     dataset = load_data(DATASET_MEMMAP_PATH)
     print("\nDataset Loaded!\n")
 
+    # Create model using specific hyperparameters
     model = Model(learning_rate=LEARNING_RATE, beta_1=BETA_1, beta_2=BETA_2)
+
+    # Start the training process
     model.train(dataset=dataset, epochs=EPOCHS, batch_size=BATCH_SIZE)
 
 
