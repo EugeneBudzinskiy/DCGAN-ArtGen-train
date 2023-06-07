@@ -3,7 +3,6 @@
 
 ## Description
 
----
 
 This is the training module for the image generation project based on Deep Convolutional 
 Generative Adversarial Network (DCGAN). This module is responsible for dataset processing, 
@@ -31,7 +30,6 @@ which can be classified as a satisfactory result.
 
 ## Installation
 
----
 
 Implementation was written using Python 3.9 
 
@@ -64,7 +62,6 @@ in numpy memmap format.
 
 ## Usage
 
----
 
 1. Download [ArtBench-10](https://github.com/liaopeiyuan/artbench) original size, LSUN 
 encoded, dataset to [dataset_lsun](dataset_lsun) folder
@@ -78,7 +75,6 @@ will be saved to [xtr_generators](xtr_generators) folder)
 
 ## Credits
 
----
 
 * [Goodfellow, I. J., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., 
 Ozair, S., Courville, A., & Bengio, Y. (2014, June 10). Generative Adversarial 
@@ -122,6 +118,5 @@ https://arxiv.org/abs/1704.00028)
 
 ## License
 
----
 
 Licensed under the [MIT](LICENSE) license.
