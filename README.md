@@ -33,8 +33,6 @@ which can be classified as a satisfactory result.
 
 ---
 
-What are the steps required to install your project? Provide a step-by-step description of how to get the development environment running.
-
 Implementation was written using Python 3.9 
 
 In file [requirements.txt](requirements.txt) are listed main libraries which are necessary 
