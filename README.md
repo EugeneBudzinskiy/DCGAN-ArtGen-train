@@ -71,7 +71,7 @@ encoded, dataset to [dataset_lsun](dataset_lsun) folder
 2. To convert dataset to correct format run script [`convert.py`](convert.py)
 3. To start train process run script [`train.py`](train.py)
 4. Wait until end of training process (may take a long time)
-5. To extraxt pretrained model run scropt [`extract.py`](extract.py) (model
+5. To extract pretrained model run scropt [`extract.py`](extract.py) (model
 will be saved to [xtr_generators](xtr_generators) folder)
 6. End of training process. Use extracted pretrained model in other module
     
